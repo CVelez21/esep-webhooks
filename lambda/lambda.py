@@ -53,21 +53,27 @@ def lambda_handler(event, context):
         body = event
 
     # -------------------------------------------------------------------------
-    # Try to parse the incoming body as JSON
+    # If body is JSON string, decode it; if it's already a dict, keep it
     # -------------------------------------------------------------------------
-    try:
-        payload = json.loads(body)
-    except Exception:
-        # If not valid JSON, wrap it into a dictionary for safety
-        payload = {"raw": body}
+    if isinstance(body, str):
+        try:
+            payload = json.loads(body)           # decode JSON string → dict
+        except Exception:
+            payload = {}                         # not JSON; fallback to empty
+    elif isinstance(body, dict):
+        payload = body                           # already a dict
+    else:
+        payload = {}                             # any other type → empty dict
 
     # -------------------------------------------------------------------------
     # Attempt to extract the issue's HTML URL from the GitHub payload
     # -------------------------------------------------------------------------
-    issue_url = None
+    issue_url = payload.get("issue", {}).get("html_url")
 
-    if "issue" in payload and isinstance(payload["issue"], dict):
-        issue_url = payload["issue"].get("html_url")
+    if issue_url:
+        print("[EsepWebhook] Issue URL found:", issue_url)
+    else:
+        print("[EsepWebhook] No issue URL found in payload.")
 
     # -------------------------------------------------------------------------
     # If an issue URL exists and Slack is configured, send it to Slack
@@ -75,7 +81,7 @@ def lambda_handler(event, context):
     if issue_url and slack_url:
 
         # Create a Slack-formatted message
-        message = {"text": f":tada: New GitHub Issue created: {issue_url}"}
+        message = {"text": f"New GitHub Issue created: {issue_url}"}
 
         # Convert message to bytes
         data = json.dumps(message).encode("utf-8")
@@ -106,7 +112,7 @@ def lambda_handler(event, context):
     response_body = {
         "message": "success",
         "issueUrl": issue_url,
-        'connectedToSlack': bool(slack_url)
+        "connectedToSlack": bool(slack_url)
     }
 
     return {
